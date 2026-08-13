@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { api, getToken, setToken } from '../api.js'
+import { supabase } from '../supabase.js'
+import { api } from '../api.js'
 
 const AuthContext = createContext(null)
 
@@ -8,33 +9,46 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!getToken()) {
-      setLoading(false)
-      return
+    let active = true
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!active) return
+      if (data.session) {
+        try {
+          const { user } = await api.me()
+          if (active) setUser(user)
+        } catch (e) {
+          await supabase.auth.signOut()
+        }
+      }
+      if (active) setLoading(false)
+    })
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active && !session) setUser(null)
+    })
+
+    return () => {
+      active = false
+      sub.subscription.unsubscribe()
     }
-    api
-      .me()
-      .then(({ user }) => setUser(user))
-      .catch(() => setToken(null))
-      .finally(() => setLoading(false))
   }, [])
 
   const login = async (student_id, password) => {
     const data = await api.login(student_id, password)
-    setToken(data.token)
     setUser(data.user)
+    return data
   }
 
   const register = async (formData) => {
     const data = await api.register(formData)
-    setToken(data.token)
     setUser(data.user)
+    return data
   }
 
   const updateUser = (u) => setUser(u)
 
-  const logout = () => {
-    setToken(null)
+  const logout = async () => {
+    await supabase.auth.signOut()
     setUser(null)
   }
 

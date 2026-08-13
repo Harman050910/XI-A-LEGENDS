@@ -16,7 +16,12 @@ async function request(url, options = {}) {
   if (options.body && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
-  const res = await fetch(url, { ...options, headers })
+  let res
+  try {
+    res = await fetch(url, { ...options, headers })
+  } catch (e) {
+    throw new Error('Cannot reach the server. Make sure it is running (npm run dev).')
+  }
   let data = null
   try {
     data = await res.json()

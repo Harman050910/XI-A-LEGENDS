@@ -14,18 +14,30 @@ function timeAgo(iso) {
   return `${days}d ago`
 }
 
-export default function DoubtThread({ doubtId, onClose, onUpdated, user }) {
+export default function DoubtThread({ doubtId, onClose, onUpdated, onDeleted, user, startInEdit }) {
   const [doubt, setDoubt] = useState(null)
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editContent, setEditContent] = useState('')
 
   useEffect(() => {
+    setDoubt(null)
+    setEditing(false)
     api
       .doubt(doubtId)
-      .then(({ doubt }) => setDoubt(doubt))
+      .then(({ doubt }) => {
+        setDoubt(doubt)
+        if (startInEdit) {
+          setEditTitle(doubt.title)
+          setEditContent(doubt.content)
+          setEditing(true)
+        }
+      })
       .catch((e) => setError(e.message))
-  }, [doubtId])
+  }, [doubtId, startInEdit])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -57,6 +69,47 @@ export default function DoubtThread({ doubtId, onClose, onUpdated, user }) {
     if (onUpdated) onUpdated(updated)
   }
 
+  const startEditing = () => {
+    setEditTitle(doubt.title)
+    setEditContent(doubt.content)
+    setError('')
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setError('')
+    setEditing(false)
+  }
+
+  const saveEdit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setBusy(true)
+    try {
+      const { doubt: updated } = await api.updateDoubt(doubtId, editTitle, editContent)
+      setDoubt(updated)
+      setEditing(false)
+      if (onUpdated) onUpdated(updated)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeDoubt = async () => {
+    if (!confirm('Delete this doubt and all its discussions?')) return
+    try {
+      await api.deleteDoubt(doubtId)
+      if (onDeleted) onDeleted(doubtId)
+      onClose()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const isAuthor = user && doubt && user.id === doubt.author_id
+
   if (!doubt) {
     return (
       <div className="modal-overlay" onClick={onClose}>
@@ -80,9 +133,35 @@ export default function DoubtThread({ doubtId, onClose, onUpdated, user }) {
             <Avatar user={{ name: doubt.author_name, pfp: doubt.author_pfp }} size={34} />
             <span className="doubt-author">{doubt.author_name}</span>
             <span className="muted doubt-time">· {timeAgo(doubt.created_at)}</span>
+            {isAuthor && !editing && (
+              <button className="ghost mini" onClick={startEditing}>✏ EDIT</button>
+            )}
           </div>
-          <h3>{doubt.title}</h3>
-          <p className="thread-content">{doubt.content}</p>
+
+          {editing ? (
+            <form className="edit-doubt-form" onSubmit={saveEdit}>
+              {error && <div className="form-error">{error}</div>}
+              <div className="field">
+                <label>Doubt title</label>
+                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Short question..." required />
+              </div>
+              <div className="field">
+                <label>Explain your doubt</label>
+                <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={4} placeholder="Full details..." required />
+              </div>
+              <div className="form-actions">
+                <button type="submit" disabled={busy}>{busy ? 'SAVING...' : 'SAVE CHANGES'}</button>
+                <button type="button" className="danger" onClick={removeDoubt} disabled={busy}>DELETE</button>
+                <button type="button" className="ghost" onClick={cancelEditing} disabled={busy}>CANCEL</button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <h3>{doubt.title}</h3>
+              <p className="thread-content">{doubt.content}</p>
+            </>
+          )}
+
           <div className="doubt-actions">
             <button className={`ghost mini ${doubt.my_vote > 0 ? 'voted-up' : ''}`} onClick={() => vote(1)}>▲ {doubt.upvotes}</button>
             <button className={`ghost mini ${doubt.my_vote < 0 ? 'voted-down' : ''}`} onClick={() => vote(-1)}>▼ {doubt.downvotes}</button>

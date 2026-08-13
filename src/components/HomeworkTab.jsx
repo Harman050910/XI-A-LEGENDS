@@ -30,6 +30,7 @@ export default function HomeworkTab() {
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ type: 'share', subject: '', title: '', description: '' })
   const [file, setFile] = useState(null)
+  const [editing, setEditing] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -57,10 +58,15 @@ export default function HomeworkTab() {
       fd.append('title', form.title)
       fd.append('description', form.description)
       if (file) fd.append('file', file)
-      await api.createHomework(fd)
+      if (editing) {
+        await api.updateHomework(editing, fd)
+      } else {
+        await api.createHomework(fd)
+      }
       setForm({ type: 'share', subject: '', title: '', description: '' })
       setFile(null)
       setShowForm(false)
+      setEditing(null)
       load()
     } catch (err) {
       setError(err.message)
@@ -69,10 +75,27 @@ export default function HomeworkTab() {
     }
   }
 
+  const startEdit = (h) => {
+    setEditing(h.id)
+    setShowForm(false)
+    setForm({ type: h.type, subject: h.subject || '', title: h.title, description: h.description || '' })
+    setFile(null)
+    setError('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const cancelEdit = () => {
+    setEditing(null)
+    setForm({ type: 'share', subject: '', title: '', description: '' })
+    setFile(null)
+    setError('')
+  }
+
   const del = async (id) => {
     if (!confirm('Delete this homework?')) return
     try {
       await api.deleteHomework(id)
+      if (editing === id) cancelEdit()
       load()
     } catch (e) {
       alert(e.message)
@@ -85,7 +108,7 @@ export default function HomeworkTab() {
     <div className="tab-content">
       <div className="hw-toolbar">
         <div>
-          <button onClick={() => setShowForm(!showForm)}>{showForm ? 'CLOSE FORM' : '+ POST HOMEWORK'}</button>
+          <button onClick={() => { setShowForm(!showForm); cancelEdit() }}>{showForm ? 'CLOSE FORM' : '+ POST HOMEWORK'}</button>
         </div>
         <div className="filter-group">
           {['all', 'share', 'ask'].map((f) => (
@@ -98,9 +121,10 @@ export default function HomeworkTab() {
 
       <p className="hw-note muted">⏳ Homework automatically deletes after 3 days</p>
 
-      {showForm && (
+      {(showForm || editing) && (
         <form className="hw-form" onSubmit={submit}>
           {error && <div className="form-error">{error}</div>}
+          <h3 className="form-title">{editing ? 'EDIT HOMEWORK' : 'POST HOMEWORK'}</h3>
           <div className="form-row">
             <div className="field">
               <label>Type</label>
@@ -123,10 +147,18 @@ export default function HomeworkTab() {
             <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe the homework, pages, questions..." />
           </div>
           <div className="field">
-            <label>Attach file (photo / pdf)</label>
+            <label>Attach file (photo / pdf){editing ? ' — leave empty to keep the current file' : ''}</label>
             <input type="file" onChange={(e) => setFile(e.target.files[0])} />
           </div>
-          <button type="submit" disabled={busy}>{busy ? 'POSTING...' : 'POST HOMEWORK'}</button>
+          <div className="form-actions">
+            <button type="submit" disabled={busy}>{busy ? 'SAVING...' : editing ? 'SAVE CHANGES' : 'POST HOMEWORK'}</button>
+            {editing && (
+              <>
+                <button type="button" className="danger" onClick={() => del(editing)} disabled={busy}>DELETE</button>
+                <button type="button" className="ghost" onClick={cancelEdit} disabled={busy}>CANCEL</button>
+              </>
+            )}
+          </div>
         </form>
       )}
 
@@ -160,7 +192,10 @@ export default function HomeworkTab() {
                 )}
                 {h.type === 'ask' && h.file && <span className="muted hw-solved-note">attached a file to their ask</span>}
                 {user && h.author_id === user.id && (
-                  <button className="danger" onClick={() => del(h.id)}>DELETE</button>
+                  <>
+                    <button onClick={() => startEdit(h)}>EDIT</button>
+                    <button className="danger" onClick={() => del(h.id)}>DELETE</button>
+                  </>
                 )}
               </div>
             </div>

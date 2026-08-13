@@ -24,6 +24,7 @@ export default function DoubtsTab() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(null)
+  const [editOpen, setEditOpen] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -64,6 +65,10 @@ export default function DoubtsTab() {
   const toggleSave = async (d) => {
     const data = await api.toggleSaved(d.id)
     setDoubts((list) => list.map((x) => (x.id === d.id ? data.doubt : x)))
+  }
+
+  const removeDoubt = (id) => {
+    setDoubts((list) => list.filter((x) => x.id !== id))
   }
 
   return (
@@ -114,6 +119,9 @@ export default function DoubtsTab() {
                 <p className="doubt-preview" onClick={() => setOpen(d)}>{d.content}</p>
                 <div className="doubt-actions">
                   <button className="ghost mini" onClick={() => setOpen(d)}>💬 {d.discussions.length} DISCUSSION{d.discussions.length !== 1 ? 'S' : ''}</button>
+                  {user && d.author_id === user.id && (
+                    <button className="ghost mini" onClick={() => { setEditOpen(d.id); setOpen(d) }}>✏ EDIT</button>
+                  )}
                   <button className={`ghost mini ${d.saved ? 'saved-active' : ''}`} onClick={() => toggleSave(d)}>
                     {d.saved ? '★ SAVED' : '☆ SAVE'}
                   </button>
@@ -127,11 +135,14 @@ export default function DoubtsTab() {
       {open && (
         <DoubtThread
           doubtId={open.id}
-          onClose={() => setOpen(null)}
+          onClose={() => { setOpen(null); setEditOpen(null) }}
           onUpdated={(updated) => {
             setDoubts((list) => list.map((x) => (x.id === updated.id ? updated : x)))
             setOpen(null)
+            setEditOpen(null)
           }}
+          onDeleted={removeDoubt}
+          startInEdit={editOpen === open.id}
           user={user}
         />
       )}

@@ -265,6 +265,37 @@ export const api = {
     if (error) throw new Error(error.message)
   },
 
+  updateHomework: async (id, formData) => {
+    const profile = await getCurrentProfile()
+    if (!profile) throw new Error('Not logged in')
+    const title = String(formData.get('title') || '').trim()
+    if (!title) throw new Error('Title is required')
+    const updates = {
+      title,
+      description: String(formData.get('description') || '').trim(),
+      subject: String(formData.get('subject') || 'General').trim(),
+      type: formData.get('type') === 'ask' ? 'ask' : 'share'
+    }
+    const file = formData.get('file')
+    if (file && file.size) {
+      const { data: old } = await supabase.from('homework').select('file_path').eq('id', Number(id)).maybeSingle()
+      if (old && old.file_path) await supabase.storage.from('hw').remove([old.file_path])
+      updates.file_path = await uploadHwFile(file)
+      updates.original_name = file.name
+    }
+    const { data: hw, error } = await supabase
+      .from('homework')
+      .update(updates)
+      .eq('id', Number(id))
+      .select('id, title, description, subject, type, file_path, original_name, author_id, created_at, author:profiles!author_id(name, pfp)')
+      .single()
+    if (error) throw new Error('Could not update homework')
+    const { file_path: fp, author, ...rest } = hw
+    return {
+      homework: { ...rest, file: fp, author_name: author?.name || 'Unknown', author_pfp: author?.pfp || null }
+    }
+  },
+
   // ---------------------------------------------------------------- doubts + discussions
 
   doubts: async () => {
@@ -286,6 +317,25 @@ export const api = {
     const full = await doubtRow(created.id)
     const [meta] = await composeDoubts([full], profile.id)
     return { doubt: meta }
+  },
+
+  updateDoubt: async (id, title, content) => {
+    const profile = await getCurrentProfile()
+    if (!profile) throw new Error('Not logged in')
+    if (!String(title).trim() || !String(content).trim()) throw new Error('Title and content are required')
+    const { error } = await supabase
+      .from('doubts')
+      .update({ title: String(title).trim(), content: String(content).trim() })
+      .eq('id', Number(id))
+    if (error) throw new Error('Could not update doubt')
+    const full = await doubtRow(id)
+    const [meta] = await composeDoubts([full], profile.id)
+    return { doubt: meta }
+  },
+
+  deleteDoubt: async (id) => {
+    const { error } = await supabase.from('doubts').delete().eq('id', Number(id))
+    if (error) throw new Error(error.message)
   },
 
   doubt: async (id) => {

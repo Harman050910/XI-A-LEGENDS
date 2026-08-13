@@ -118,6 +118,11 @@ create policy "authors delete their homework"
   on public.homework for delete to authenticated
   using (author_id in (select id from public.profiles where auth_id = auth.uid()));
 
+create policy "authors update their homework"
+  on public.homework for update to authenticated
+  using (author_id in (select id from public.profiles where auth_id = auth.uid()))
+  with check (author_id in (select id from public.profiles where auth_id = auth.uid()));
+
 -- doubts -------------------------------------------------------
 create policy "doubts visible to all students"
   on public.doubts for select to authenticated using (true);
@@ -125,6 +130,15 @@ create policy "doubts visible to all students"
 create policy "students post doubts"
   on public.doubts for insert to authenticated
   with check (author_id in (select id from public.profiles where auth_id = auth.uid()));
+
+create policy "authors update their doubts"
+  on public.doubts for update to authenticated
+  using (author_id in (select id from public.profiles where auth_id = auth.uid()))
+  with check (author_id in (select id from public.profiles where auth_id = auth.uid()));
+
+create policy "authors delete their doubts"
+  on public.doubts for delete to authenticated
+  using (author_id in (select id from public.profiles where auth_id = auth.uid()));
 
 -- discussions --------------------------------------------------
 create policy "discussions visible to all students"

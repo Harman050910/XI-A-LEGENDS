@@ -215,13 +215,48 @@ export const api = {
       .select('id, title, description, subject, type, file_path, original_name, author_id, created_at, author:profiles!author_id(name, pfp)')
       .gte('created_at', new Date(Date.now() - THREE_DAYS).toISOString())
       .order('created_at', { ascending: false })
+    const ids = (data || []).map((h) => h.id)
+    let byHw = {}
+    if (ids.length) {
+      const { data: comments } = await supabase
+        .from('homework_discussions')
+        .select('id, homework_id, content, created_at, author:profiles!author_id(name, pfp)')
+        .in('homework_id', ids)
+        .order('created_at', { ascending: true })
+      byHw = {}
+      for (const c of comments || []) {
+        ;(byHw[c.homework_id] = byHw[c.homework_id] || []).push({
+          id: c.id,
+          content: c.content,
+          created_at: c.created_at,
+          author_name: c.author?.name || 'Unknown',
+          author_pfp: c.author?.pfp || null
+        })
+      }
+    }
     const items = (data || []).map(({ file_path, author, ...rest }) => ({
       ...rest,
       file: file_path,
       author_name: author?.name || 'Unknown',
-      author_pfp: author?.pfp || null
+      author_pfp: author?.pfp || null,
+      comments: byHw[rest.id] || []
     }))
     return { homework: items }
+  },
+
+  addHomeworkComment: async (id, content) => {
+    const profile = await getCurrentProfile()
+    if (!profile) throw new Error('Not logged in')
+    const text = String(content || '').trim()
+    if (!text) throw new Error('Message cannot be empty')
+    const { data: c, error } = await supabase
+      .from('homework_discussions')
+      .insert({ homework_id: Number(id), author_id: profile.id, content: text })
+      .select()
+      .single()
+    if (error) throw new Error('Could not post message')
+    const { data: u } = await supabase.from('profiles').select('name, pfp').eq('id', profile.id).maybeSingle()
+    return { comment: { ...c, author_name: u?.name || 'Unknown', author_pfp: u?.pfp || null } }
   },
 
   createHomework: async (formData) => {
@@ -252,7 +287,7 @@ export const api = {
     if (error) throw new Error('Could not post homework')
     const { file_path: fp, author, ...rest } = hw
     return {
-      homework: { ...rest, file: fp, author_name: author?.name || 'Unknown', author_pfp: author?.pfp || null }
+      homework: { ...rest, file: fp, author_name: author?.name || 'Unknown', author_pfp: author?.pfp || null, comments: [] }
     }
   },
 
@@ -292,7 +327,7 @@ export const api = {
     if (error) throw new Error('Could not update homework')
     const { file_path: fp, author, ...rest } = hw
     return {
-      homework: { ...rest, file: fp, author_name: author?.name || 'Unknown', author_pfp: author?.pfp || null }
+      homework: { ...rest, file: fp, author_name: author?.name || 'Unknown', author_pfp: author?.pfp || null, comments: [] }
     }
   },
 

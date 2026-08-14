@@ -12,6 +12,7 @@
 -- ============================================================
 
 -- 1) RESET (the app connects directly now - tables are rebuilt clean)
+drop table if exists homework_discussions cascade;
 drop table if exists votes cascade;
 drop table if exists saved_discussions cascade;
 drop table if exists discussions cascade;
@@ -60,6 +61,15 @@ create table public.discussions (
   created_at timestamptz default now()
 );
 
+-- 5b) Homework messages (comments under share/ask posts)
+create table public.homework_discussions (
+  id bigint generated always as identity primary key,
+  homework_id bigint references public.homework(id) on delete cascade not null,
+  author_id bigint references public.profiles(id) on delete cascade not null,
+  content text not null,
+  created_at timestamptz default now()
+);
+
 -- 6) Upvote / downvote
 create table public.votes (
   doubt_id bigint references public.doubts(id) on delete cascade not null,
@@ -82,6 +92,7 @@ create index if not exists idx_doubts_created on public.doubts(created_at);
 create index if not exists idx_discussions_doubt on public.discussions(doubt_id);
 create index if not exists idx_votes_doubt on public.votes(doubt_id);
 create index if not exists idx_saved_user on public.saved_discussions(user_id);
+create index if not exists idx_hw_discussions_homework on public.homework_discussions(homework_id);
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -93,6 +104,7 @@ alter table public.doubts enable row level security;
 alter table public.discussions enable row level security;
 alter table public.votes enable row level security;
 alter table public.saved_discussions enable row level security;
+alter table public.homework_discussions enable row level security;
 
 -- profiles -----------------------------------------------------
 create policy "profiles visible to all students"
@@ -122,6 +134,18 @@ create policy "authors update their homework"
   on public.homework for update to authenticated
   using (author_id in (select id from public.profiles where auth_id = auth.uid()))
   with check (author_id in (select id from public.profiles where auth_id = auth.uid()));
+
+-- homework_discussions ------------------------------------------
+create policy "hw messages visible to all students"
+  on public.homework_discussions for select to authenticated using (true);
+
+create policy "students post hw messages"
+  on public.homework_discussions for insert to authenticated
+  with check (author_id in (select id from public.profiles where auth_id = auth.uid()));
+
+create policy "students delete their hw messages"
+  on public.homework_discussions for delete to authenticated
+  using (author_id in (select id from public.profiles where auth_id = auth.uid()));
 
 -- doubts -------------------------------------------------------
 create policy "doubts visible to all students"
